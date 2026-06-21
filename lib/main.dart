@@ -46,29 +46,35 @@ class GameScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            const Icon(Icons.wb_sunny, color: Color(0xFFFBBF24)),
-            const SizedBox(width: 10),
-            Text(
-              'SOLSTICE ENGINE',
-              style: GoogleFonts.orbitron(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-                color: const Color(0xFFFBBF24),
+        title: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              const Icon(Icons.wb_sunny, color: Color(0xFFFBBF24), size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'SOLSTICE ENGINE',
+                style: GoogleFonts.orbitron(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                  fontSize: 14,
+                  color: const Color(0xFFFBBF24),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            const Icon(Icons.brightness_3, color: Color(0xFF38BDF8)),
-            const Spacer(),
-            Text(
-              'A Turing Machine of Light & Shadow',
-              style: GoogleFonts.orbitron(
-                fontSize: 12,
-                color: Colors.grey[400],
-              ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              const Icon(Icons.brightness_3, color: Color(0xFF38BDF8), size: 16),
+              if (!isMobile) ...[
+                const SizedBox(width: 15),
+                Text(
+                  'A Turing Machine of Light & Shadow',
+                  style: GoogleFonts.orbitron(
+                    fontSize: 10,
+                    color: Colors.grey[400],
+                  ),
+                ),
+              ]
+            ],
+          ),
         ),
         backgroundColor: const Color(0xFF020617), // Deep dark slate
         elevation: 4,
@@ -77,15 +83,19 @@ class GameScreen extends StatelessWidget {
           ? const SingleChildScrollView(
               child: Column(
                 children: [
-                  MainPanel(),
-                  SidebarPanel(),
+                  MainPanel(isMobile: true),
+                  Divider(color: Color(0xFF1E293B), thickness: 2, height: 32),
+                  SizedBox(
+                    height: 450,
+                    child: SidebarPanel(),
+                  ),
                 ],
               ),
             )
           : Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Expanded(flex: 7, child: MainPanel()),
+                const Expanded(flex: 7, child: MainPanel(isMobile: false)),
                 Container(width: 1, color: Colors.blueGrey[700]),
                 const Expanded(flex: 3, child: SidebarPanel()),
               ],
@@ -95,19 +105,90 @@ class GameScreen extends StatelessWidget {
 }
 
 class MainPanel extends StatelessWidget {
-  const MainPanel({super.key});
+  final bool isMobile;
+  const MainPanel({super.key, required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<GameProvider>(context);
     final level = provider.currentLevel;
 
+    // Build the tape card
+    Widget tapeCard = Card(
+      color: const Color(0xFF0B0F19), // Extra dark slate
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFF1E293B)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Stack(
+          children: [
+            Center(
+              child: AspectRatio(
+                aspectRatio: 1.0,
+                child: CustomPaint(
+                  painter: SolsticeTapePainter(
+                    tape: provider.tape,
+                    headPosition: provider.headPosition,
+                    currentState: provider.currentState,
+                    isRunning: provider.isRunning,
+                  ),
+                ),
+              ),
+            ),
+            // Overlay showing current tape light count
+            Positioned(
+              bottom: 4,
+              left: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B).withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '☀️ ${provider.tape.where((v) => v == 1).length}  |  🌙 ${provider.tape.where((v) => v == 0).length}',
+                  style: GoogleFonts.shareTechMono(fontSize: 11, color: Colors.grey[300]),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Build rule header
+    Widget rulesHeader = Padding(
+      padding: const EdgeInsets.only(top: 12.0, bottom: 8.0),
+      child: Text(
+        'TRANSITION RULES (PROGRAM)',
+        style: GoogleFonts.orbitron(
+          color: Colors.grey[400],
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+
+    // Build rule list/grid
+    Widget rulesWidget = RuleGridWidget(
+      rules: provider.activeRules,
+      currentState: provider.currentState,
+      currentReadVal: provider.tape[provider.headPosition],
+      isMobile: isMobile,
+      onRuleChanged: (index, writeVal, moveDir, nextState) {
+        provider.updateRule(index, writeVal: writeVal, moveDir: moveDir, nextState: nextState);
+      },
+    );
+
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Level selection & basic info
+          // Level selection & goal card
           Card(
             color: const Color(0xFF1E293B),
             shape: RoundedRectangleBorder(
@@ -115,73 +196,76 @@ class MainPanel extends StatelessWidget {
               side: const BorderSide(color: Color(0xFF334155)),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      DropdownButton<int>(
-                        value: provider.currentLevelIndex,
-                        dropdownColor: const Color(0xFF1E293B),
-                        style: GoogleFonts.orbitron(
-                          color: const Color(0xFFFBBF24),
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: DropdownButton<int>(
+                          value: provider.currentLevelIndex,
+                          isExpanded: true,
+                          dropdownColor: const Color(0xFF1E293B),
+                          style: GoogleFonts.orbitron(
+                            color: const Color(0xFFFBBF24),
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          onChanged: (val) {
+                            if (val != null) provider.selectLevel(val);
+                          },
+                          items: List.generate(provider.levels.length, (index) {
+                            final lvl = provider.levels[index];
+                            return DropdownMenuItem(
+                              value: index,
+                              child: Text('Lvl ${lvl.id}: ${lvl.name}'),
+                            );
+                          }),
                         ),
-                        onChanged: (val) {
-                          if (val != null) provider.selectLevel(val);
-                        },
-                        items: List.generate(provider.levels.length, (index) {
-                          final lvl = provider.levels[index];
-                          return DropdownMenuItem(
-                            value: index,
-                            child: Text('LEVEL ${lvl.id}: ${lvl.name}'),
-                          );
-                        }),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blueGrey[700]!, width: 1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.blueGrey[700]!),
                         ),
                         child: Text(
-                          'STEPS: ${provider.stepsTaken} / ${level.maxSteps}',
+                          'STEPS: ${provider.stepsTaken}/${level.maxSteps}',
                           style: GoogleFonts.shareTechMono(
                             color: provider.stepsTaken > level.maxSteps ? Colors.red : const Color(0xFF38BDF8),
                             fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                            fontSize: 12,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   Text(
                     level.description,
-                    style: TextStyle(color: Colors.blueGrey[300], fontSize: 13),
+                    style: TextStyle(color: Colors.blueGrey[300], fontSize: 11),
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(color: const Color(0xFFFBBF24).withOpacity(0.3)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.flag_circle, color: Color(0xFFFBBF24), size: 20),
-                        const SizedBox(width: 8),
+                        const Icon(Icons.flag_circle, color: Color(0xFFFBBF24), size: 16),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'GOAL: ${level.goalDescription}',
                             style: GoogleFonts.shareTechMono(
                               color: const Color(0xFFFBBF24),
-                              fontSize: 13,
+                              fontSize: 12,
                             ),
                           ),
                         ),
@@ -192,97 +276,41 @@ class MainPanel extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
-          // Central Visualization: Turing Machine Tape (Circular) & Read/Write needle
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: Card(
-                    color: const Color(0xFF0B0F19), // Extra dark slate
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: const BorderSide(color: Color(0xFF1E293B)),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Stack(
-                        children: [
-                          Center(
-                            child: AspectRatio(
-                              aspectRatio: 1.0,
-                              child: CustomPaint(
-                                painter: SolsticeTapePainter(
-                                  tape: provider.tape,
-                                  headPosition: provider.headPosition,
-                                  currentState: provider.currentState,
-                                  isRunning: provider.isRunning,
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Overlay showing current tape light count
-                          Positioned(
-                            bottom: 12,
-                            left: 12,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1E293B),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                'LIGHT HOURS: ${provider.tape.where((v) => v == 1).length} ☀️  |  DARK HOURS: ${provider.tape.where((v) => v == 0).length} 🌙',
-                                style: GoogleFonts.shareTechMono(fontSize: 12, color: Colors.grey[300]),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-
-                // Transition Rule panel
-                Expanded(
-                  flex: 6,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: Text(
-                          'TRANSITION PROGRAM (TURING ENGINE RULES)',
-                          style: GoogleFonts.orbitron(
-                            color: Colors.grey[400],
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: RuleGridWidget(
-                          rules: provider.activeRules,
-                          currentState: provider.currentState,
-                          currentReadVal: provider.tape[provider.headPosition],
-                          onRuleChanged: (index, writeVal, moveDir, nextState) {
-                            provider.updateRule(index, writeVal: writeVal, moveDir: moveDir, nextState: nextState);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          // Responsive Middle Section
+          if (isMobile) ...[
+            // For mobile, stack them vertically with defined heights to prevent overlaps
+            SizedBox(
+              height: 300,
+              child: tapeCard,
             ),
-          ),
-          const SizedBox(height: 16),
+            rulesHeader,
+            rulesWidget, // Height is handled internally inside responsive RuleGridWidget
+          ] else ...[
+            // For desktop, show them side-by-side using expanded layout
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(flex: 5, child: tapeCard),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 6,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        rulesHeader,
+                        Expanded(child: rulesWidget),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
 
-          // Lower Panel: Status & Control buttons
+          // Controls panel
           Card(
             color: const Color(0xFF1E293B),
             shape: RoundedRectangleBorder(
@@ -290,13 +318,13 @@ class MainPanel extends StatelessWidget {
               side: const BorderSide(color: Color(0xFF334155)),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(10.0),
               child: Column(
                 children: [
-                  // Status Display
+                  // Status box
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     decoration: BoxDecoration(
                       color: const Color(0xFF0F172A),
                       borderRadius: BorderRadius.circular(6),
@@ -306,80 +334,73 @@ class MainPanel extends StatelessWidget {
                       'STATUS: ${provider.statusMessage}',
                       style: GoogleFonts.shareTechMono(
                         color: provider.hasWon ? Colors.green : (provider.isRunning ? const Color(0xFFFBBF24) : Colors.grey[300]),
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                       textAlign: TextAlign.center,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
 
-                  // Buttons
-                  Row(
-                    children: [
-                      // Reset Button
-                      IconButton(
-                        icon: const Icon(Icons.replay),
-                        tooltip: 'Reset Tape',
-                        color: Colors.red[300],
-                        onPressed: provider.resetLevel,
-                      ),
-                      const SizedBox(width: 8),
-
-                      // Single Step
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.redo, size: 16),
-                        label: const Text('STEP'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueGrey[700],
-                          foregroundColor: Colors.white,
+                  // Button Row
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        // Reset
+                        IconButton(
+                          icon: const Icon(Icons.replay),
+                          tooltip: 'Reset',
+                          color: Colors.red[300],
+                          onPressed: provider.resetLevel,
                         ),
-                        onPressed: provider.isRunning || provider.hasWon ? null : provider.stepMachine,
-                      ),
-                      const SizedBox(width: 8),
+                        const SizedBox(width: 4),
 
-                      // Run / Pause
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          icon: Icon(provider.isRunning ? Icons.pause : Icons.play_arrow),
-                          label: Text(provider.isRunning ? 'PAUSE MACHINE' : 'RUN SOLSTICE MACHINE'),
+                        // Step
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.redo, size: 14),
+                          label: const Text('STEP', style: TextStyle(fontSize: 11)),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: provider.isRunning ? Colors.amber[700] : const Color(0xFF10B981), // Emerald 500
+                            backgroundColor: Colors.blueGrey[700],
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                          onPressed: provider.isRunning || provider.hasWon ? null : provider.stepMachine,
+                        ),
+                        const SizedBox(width: 6),
+
+                        // Run / Pause
+                        ElevatedButton.icon(
+                          icon: Icon(provider.isRunning ? Icons.pause : Icons.play_arrow, size: 14),
+                          label: Text(provider.isRunning ? 'PAUSE' : 'RUN MACHINE', style: const TextStyle(fontSize: 11)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: provider.isRunning ? Colors.amber[700] : const Color(0xFF10B981),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           ),
                           onPressed: provider.hasWon
                               ? null
                               : (provider.isRunning ? provider.pauseMachine : provider.runMachine),
                         ),
-                      ),
-                      const SizedBox(width: 12),
+                        const SizedBox(width: 8),
 
-                      // Speed Slider
-                      Row(
-                        children: [
-                          const Icon(Icons.speed, size: 16, color: Colors.grey),
-                          const SizedBox(width: 6),
-                          Text(
-                            'SPEED: ',
-                            style: GoogleFonts.shareTechMono(fontSize: 11, color: Colors.grey[400]),
+                        // Speed Indicator
+                        const Icon(Icons.speed, size: 14, color: Colors.grey),
+                        SizedBox(
+                          width: 80,
+                          child: Slider(
+                            value: (600 - provider.speedMs).toDouble(),
+                            min: 0,
+                            max: 550,
+                            divisions: 11,
+                            activeColor: const Color(0xFFFBBF24),
+                            onChanged: (val) {
+                              provider.speedMs = 600 - val.toInt();
+                            },
                           ),
-                          SizedBox(
-                            width: 100,
-                            child: Slider(
-                              value: (600 - provider.speedMs).toDouble(),
-                              min: 0,
-                              max: 550,
-                              divisions: 11,
-                              activeColor: const Color(0xFFFBBF24),
-                              onChanged: (val) {
-                                provider.speedMs = 600 - val.toInt();
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -422,40 +443,40 @@ class _SidebarPanelState extends State<SidebarPanel> {
 
     return Container(
       color: const Color(0xFF0F172A),
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // AI Title header
           Row(
             children: [
-              const Icon(Icons.psychology, color: Color(0xFF38BDF8)),
-              const SizedBox(width: 8),
+              const Icon(Icons.psychology, color: Color(0xFF38BDF8), size: 18),
+              const SizedBox(width: 6),
               Text(
                 'ALAN TURING & GEMINI AI',
                 style: GoogleFonts.orbitron(
                   fontWeight: FontWeight.bold,
-                  fontSize: 13,
+                  fontSize: 11,
                   letterSpacing: 1,
                   color: const Color(0xFF38BDF8),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Text(
-            'Stuck on an algorithm or curious about the astronomical science? Consult Alan Turing, hybrid-powered by Google Gemini API!',
-            style: TextStyle(color: Colors.grey[400], fontSize: 11),
+            'Stuck or curious about the science? Consult Alan Turing, hybrid-powered by Google Gemini!',
+            style: TextStyle(color: Colors.grey[400], fontSize: 10),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
           // Message log box
           Expanded(
             child: Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: const Color(0xFF020617),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.blueGrey[800]!),
               ),
               child: ListView.builder(
@@ -465,35 +486,35 @@ class _SidebarPanelState extends State<SidebarPanel> {
                   final msg = provider.chatMessages[index];
                   final isTuring = msg['sender'] == 'Alan Turing';
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
+                    padding: const EdgeInsets.only(bottom: 8.0),
                     child: Column(
                       crossAxisAlignment: isTuring ? CrossAxisAlignment.start : CrossAxisAlignment.end,
                       children: [
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (isTuring) const Icon(Icons.android, size: 12, color: Color(0xFF38BDF8)),
+                            if (isTuring) const Icon(Icons.android, size: 10, color: Color(0xFF38BDF8)),
                             const SizedBox(width: 4),
                             Text(
                               msg['sender'] ?? '',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                fontSize: 10,
+                                fontSize: 9,
                                 color: isTuring ? const Color(0xFF38BDF8) : const Color(0xFFFBBF24),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                           decoration: BoxDecoration(
                             color: isTuring ? const Color(0xFF1E293B) : const Color(0xFF334155),
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             msg['message'] ?? '',
-                            style: const TextStyle(fontSize: 12, height: 1.4),
+                            style: const TextStyle(fontSize: 11, height: 1.3),
                           ),
                         ),
                       ],
@@ -503,7 +524,7 @@ class _SidebarPanelState extends State<SidebarPanel> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
           // Quick prompt buttons
           SingleChildScrollView(
@@ -511,14 +532,14 @@ class _SidebarPanelState extends State<SidebarPanel> {
             child: Row(
               children: [
                 _buildQuickPrompt('💡 Ask for a Hint'),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 _buildQuickPrompt('☀️ What is the Solstice?'),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 _buildQuickPrompt('🔒 How did the Bombe work?'),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
           // Input field
           Row(
@@ -526,15 +547,15 @@ class _SidebarPanelState extends State<SidebarPanel> {
               Expanded(
                 child: TextField(
                   controller: _chatController,
-                  style: const TextStyle(fontSize: 12),
+                  style: const TextStyle(fontSize: 11),
                   decoration: InputDecoration(
                     hintText: 'Ask Alan...',
-                    hintStyle: TextStyle(color: Colors.blueGrey[500], fontSize: 12),
+                    hintStyle: TextStyle(color: Colors.blueGrey[500], fontSize: 11),
                     filled: true,
                     fillColor: const Color(0xFF1E293B),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(6),
                       borderSide: BorderSide.none,
                     ),
                   ),
@@ -544,9 +565,9 @@ class _SidebarPanelState extends State<SidebarPanel> {
                   },
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               IconButton(
-                icon: const Icon(Icons.send, color: Color(0xFF38BDF8)),
+                icon: const Icon(Icons.send, color: Color(0xFF38BDF8), size: 18),
                 onPressed: () {
                   provider.sendUserChatMessage(_chatController.text);
                   _chatController.clear();
@@ -566,15 +587,15 @@ class _SidebarPanelState extends State<SidebarPanel> {
         provider.sendUserChatMessage(text);
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.blueGrey[700]!),
         ),
         child: Text(
           text,
-          style: const TextStyle(fontSize: 10, color: Colors.white),
+          style: const TextStyle(fontSize: 9, color: Colors.white),
         ),
       ),
     );
@@ -672,7 +693,7 @@ class SolsticeTapePainter extends CustomPainter {
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
     for (int i = 0; i < 24; i++) {
       double angle = i * sectorAngle - math.pi / 2;
-      double labelRadius = radius * 0.85;
+      double labelRadius = radius * 0.82;
       Offset labelPos = Offset(
         center.dx + labelRadius * math.cos(angle),
         center.dy + labelRadius * math.sin(angle),
@@ -683,7 +704,7 @@ class SolsticeTapePainter extends CustomPainter {
         style: GoogleFonts.shareTechMono(
           color: (i == headPosition) ? const Color(0xFF38BDF8) : Colors.grey[400],
           fontWeight: (i == headPosition) ? FontWeight.bold : FontWeight.normal,
-          fontSize: (i == headPosition) ? 12 : 9,
+          fontSize: (i == headPosition) ? 10 : 8,
         ),
       );
       textPainter.layout();
@@ -694,7 +715,7 @@ class SolsticeTapePainter extends CustomPainter {
     double targetAngle = headPosition * sectorAngle - math.pi / 2;
     final needlePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
+      ..strokeWidth = 2.5
       ..color = const Color(0xFF38BDF8); // Glowing neon blue
       
     // Pointy mechanical pointer
@@ -708,18 +729,18 @@ class SolsticeTapePainter extends CustomPainter {
     final headOrb = Paint()
       ..style = PaintingStyle.fill
       ..color = const Color(0xFF38BDF8);
-    canvas.drawCircle(needleTip, 6, headOrb);
+    canvas.drawCircle(needleTip, 4, headOrb);
 
     // Draw central screw/dial
     final screwOuter = Paint()
       ..style = PaintingStyle.fill
       ..color = const Color(0xFF1E293B);
-    canvas.drawCircle(center, 25, screwOuter);
+    canvas.drawCircle(center, 20, screwOuter);
 
     final screwInner = Paint()
       ..style = PaintingStyle.fill
       ..color = const Color(0xFFFBBF24);
-    canvas.drawCircle(center, 12, screwInner);
+    canvas.drawCircle(center, 10, screwInner);
 
     // Write active state inside the center screw
     final statePainter = TextPainter(textDirection: TextDirection.ltr);
@@ -728,7 +749,7 @@ class SolsticeTapePainter extends CustomPainter {
       style: GoogleFonts.orbitron(
         color: const Color(0xFF0F172A),
         fontWeight: FontWeight.bold,
-        fontSize: 10,
+        fontSize: 8,
       ),
     );
     statePainter.layout();
@@ -749,6 +770,7 @@ class RuleGridWidget extends StatelessWidget {
   final List<TransitionRule> rules;
   final String currentState;
   final int currentReadVal;
+  final bool isMobile;
   final Function(int, int?, String?, String?) onRuleChanged;
 
   const RuleGridWidget({
@@ -756,145 +778,166 @@ class RuleGridWidget extends StatelessWidget {
     required this.rules,
     required this.currentState,
     required this.currentReadVal,
+    required this.isMobile,
     required this.onRuleChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 1.45,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
+    if (isMobile) {
+      // For mobile: draw as a single column scrollable list (no grid layout) so elements have full width and do not overlap!
+      return Column(
+        children: List.generate(rules.length, (index) {
+          final rule = rules[index];
+          final isActive = (rule.state == currentState && rule.readVal == currentReadVal);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8.0),
+            height: 90,
+            child: _buildRuleCard(index, rule, isActive),
+          );
+        }),
+      );
+    } else {
+      // For desktop: beautiful 2-column grid
+      return GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 1.45,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+        ),
+        itemCount: rules.length,
+        itemBuilder: (context, index) {
+          final rule = rules[index];
+          final isActive = (rule.state == currentState && rule.readVal == currentReadVal);
+          return _buildRuleCard(index, rule, isActive);
+        },
+      );
+    }
+  }
+
+  Widget _buildRuleCard(int index, TransitionRule rule, bool isActive) {
+    return Card(
+      color: isActive ? const Color(0xFF1E3A8A) : const Color(0xFF1E293B),
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: isActive ? const Color(0xFF38BDF8) : const Color(0xFF334155),
+          width: isActive ? 2.0 : 1,
+        ),
       ),
-      itemCount: rules.length,
-      itemBuilder: (context, index) {
-        final rule = rules[index];
-        final isActive = (rule.state == currentState && rule.readVal == currentReadVal);
-
-        return Card(
-          color: isActive ? const Color(0xFF1E3A8A) : const Color(0xFF1E293B), // Highlight blue if active
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(
-              color: isActive ? const Color(0xFF38BDF8) : const Color(0xFF334155),
-              width: isActive ? 2.5 : 1,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Rule header
+            Row(
               children: [
-                // Rule header
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'IF: STATE ${rule.state} & READ ${rule.readVal == 1 ? "☀️" : "🌙"}',
-                        style: GoogleFonts.shareTechMono(
-                          color: const Color(0xFFFBBF24),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                        ),
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'IF: STATE ${rule.state} & READ ${rule.readVal == 1 ? "☀️" : "🌙"}',
+                    style: GoogleFonts.shareTechMono(
+                      color: const Color(0xFFFBBF24),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
                     ),
-                    const Spacer(),
-                    if (isActive)
-                      const Row(
-                        children: [
-                          Icon(Icons.bolt, color: Color(0xFF38BDF8), size: 14),
-                          Text(
-                            'ACTIVE',
-                            style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                  ],
+                  ),
                 ),
-                const Divider(height: 8, color: Colors.blueGrey),
-
-                // Editable Fields
-                Expanded(
-                  child: Row(
+                const Spacer(),
+                if (isActive)
+                  const Row(
                     children: [
-                      // Write Val
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('WRITE', style: TextStyle(fontSize: 8, color: Colors.grey)),
-                            DropdownButton<int>(
-                              value: rule.writeVal,
-                              isDense: true,
-                              style: const TextStyle(fontSize: 11, color: Colors.white),
-                              onChanged: (val) => onRuleChanged(index, val, null, null),
-                              items: const [
-                                DropdownMenuItem(value: 0, child: Text('🌙 0')),
-                                DropdownMenuItem(value: 1, child: Text('☀️ 1')),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Move Dir
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('MOVE', style: TextStyle(fontSize: 8, color: Colors.grey)),
-                            DropdownButton<String>(
-                              value: rule.moveDir,
-                              isDense: true,
-                              style: const TextStyle(fontSize: 11, color: Colors.white),
-                              onChanged: (val) => onRuleChanged(index, null, val, null),
-                              items: const [
-                                DropdownMenuItem(value: 'R', child: Text('↻ R')),
-                                DropdownMenuItem(value: 'L', child: Text('↺ L')),
-                                DropdownMenuItem(value: 'S', child: Text('Stay')),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Next State
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('NEXT', style: TextStyle(fontSize: 8, color: Colors.grey)),
-                            DropdownButton<String>(
-                              value: rule.nextState,
-                              isDense: true,
-                              style: const TextStyle(fontSize: 11, color: Colors.white),
-                              onChanged: (val) => onRuleChanged(index, null, null, val),
-                              items: const [
-                                DropdownMenuItem(value: 'A', child: Text('A')),
-                                DropdownMenuItem(value: 'B', child: Text('B')),
-                                DropdownMenuItem(value: 'C', child: Text('C')),
-                                DropdownMenuItem(value: 'H', child: Text('HALT')),
-                              ],
-                            ),
-                          ],
-                        ),
+                      Icon(Icons.bolt, color: Color(0xFF38BDF8), size: 12),
+                      Text(
+                        'ACTIVE',
+                        style: TextStyle(color: Color(0xFF38BDF8), fontSize: 8, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
-                ),
               ],
             ),
-          ),
-        );
-      },
+            const Divider(height: 6, color: Colors.blueGrey),
+
+            // Editable Fields
+            Expanded(
+              child: Row(
+                children: [
+                  // Write Val
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('WRITE', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                        DropdownButton<int>(
+                          value: rule.writeVal,
+                          isDense: true,
+                          style: const TextStyle(fontSize: 10, color: Colors.white),
+                          onChanged: (val) => onRuleChanged(index, val, null, null),
+                          items: const [
+                            DropdownMenuItem(value: 0, child: Text('🌙 0')),
+                            DropdownMenuItem(value: 1, child: Text('☀️ 1')),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Move Dir
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('MOVE', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                        DropdownButton<String>(
+                          value: rule.moveDir,
+                          isDense: true,
+                          style: const TextStyle(fontSize: 10, color: Colors.white),
+                          onChanged: (val) => onRuleChanged(index, null, val, null),
+                          items: const [
+                            DropdownMenuItem(value: 'R', child: Text('↻ R')),
+                            DropdownMenuItem(value: 'L', child: Text('↺ L')),
+                            DropdownMenuItem(value: 'S', child: Text('Stay')),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Next State
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('NEXT', style: TextStyle(fontSize: 8, color: Colors.grey)),
+                        DropdownButton<String>(
+                          value: rule.nextState,
+                          isDense: true,
+                          style: const TextStyle(fontSize: 10, color: Colors.white),
+                          onChanged: (val) => onRuleChanged(index, null, null, val),
+                          items: const [
+                            DropdownMenuItem(value: 'A', child: Text('A')),
+                            DropdownMenuItem(value: 'B', child: Text('B')),
+                            DropdownMenuItem(value: 'C', child: Text('C')),
+                            DropdownMenuItem(value: 'H', child: Text('HALT')),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
